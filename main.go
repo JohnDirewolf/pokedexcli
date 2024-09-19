@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/JohnDirewolf/pokedexcli/pokeapi"
+	"github.com/JohnDirewolf/pokedexcli/pokecache"
 )
 
 // Commands is basically a constant, it is in this structure as this what is directed by the project specs.
@@ -17,6 +19,9 @@ var commands map[string]cliCommand
 
 // Location Start ID for Map and MapB, defined here so both functions can access it.
 var locationStartID int = 1
+
+// The Cache variable we will be using
+var myCache pokecache.CacheStruct
 
 func getKnownCommands() map[string]cliCommand {
 	commands := map[string]cliCommand{
@@ -63,25 +68,38 @@ func commandExit() error {
 func commandMap() error {
 
 	for locationID := locationStartID; locationID < locationStartID+20; locationID++ {
-		//fmt.Println(locationID)
-		//fmt.Printf("https://pokeapi.co/api/v2/location/%d/", locationID)
 		URL := fmt.Sprintf("https://pokeapi.co/api/v2/location-area/%d/", locationID)
-		locationData, err := http.Get(URL)
-		if err != nil {
-			fmt.Printf("Error accessing PokeAPI: %s\n", err)
-			return err
-		}
-		defer locationData.Body.Close()
-
 		var locationVar pokeapi.Location
-		decoder := json.NewDecoder(locationData.Body)
-		err = decoder.Decode(&locationVar)
-		if err != nil {
-			fmt.Printf("Unknown Location ID: %d\n", locationID)
-		} else {
-			fmt.Println(locationVar.Name)
-		}
 
+		if localLocationData, found := myCache.Get(URL); found {
+			err := json.Unmarshal(localLocationData, &locationVar)
+			if err != nil {
+				fmt.Printf("Unknown Location ID: %d\n", locationID)
+			} else {
+				fmt.Println(locationVar.Name)
+			}
+		} else {
+			locationData, err := http.Get(URL)
+			defer locationData.Body.Close()
+			if err != nil {
+				fmt.Printf("Error accessing PokeAPI: %s\n", err)
+				return err
+			}
+			decoder := json.NewDecoder(locationData.Body)
+			err = decoder.Decode(&locationVar)
+			//Add the existing location to cache
+			if locationByte, err := json.Marshal(locationVar); err != nil {
+				fmt.Printf("Error Marshalling Data on Location: %v\n", err)
+			} else {
+				myCache.Add(URL, locationByte)
+			}
+
+			if err != nil {
+				fmt.Printf("Unknown Location ID: %d\n", locationID)
+			} else {
+				fmt.Println(locationVar.Name)
+			}
+		}
 	}
 	locationStartID = locationStartID + 20
 
@@ -90,10 +108,12 @@ func commandMap() error {
 
 func commandMapB() error {
 
+	//fmt.Println("Start command MapB")
 	if locationStartID == 1 {
 		//This should only trigger if the user tries to use MapB before Map on start of program.
 		fmt.Println("Already at start of Index, please use Map.")
 	} else {
+		//fmt.Printf("Going back: Start location: %v", locationStartID)
 		//So Map B goes back to the previous set of locations, if we have only printed the first set of locations we just reset to the start.
 		locationStartID = locationStartID - 40
 		if locationStartID < 1 {
@@ -107,6 +127,8 @@ func commandMapB() error {
 func main() {
 	//Initialize our list of known commands
 	commands = getKnownCommands()
+	//Create the Cache
+	myCache = pokecache.NewCache(5 * time.Second)
 
 	fmt.Println("Welcome to the Pokedex!")
 	//Create a Scanner
@@ -118,6 +140,7 @@ func main() {
 		//Get command and I put it to all lower to help in processing the commands.
 		cmd := strings.ToLower(cmdScan.Text())
 		//Check if it is a valid command, if so process it based on the fuction in the structure or alert user the command is invalid
+		//fmt.Printf("Your command: %v\n", cmd)
 		if _, exists := commands[cmd]; exists {
 			commands[cmd].callback()
 		} else {
