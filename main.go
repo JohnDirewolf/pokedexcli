@@ -2,15 +2,18 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
+	//"encoding/json"
 	"fmt"
-	"net/http"
+	//"net/http"
+	"errors"
 	"os"
+	"strconv"
 	"strings"
-	"time"
+
+	//"time"
 
 	"github.com/JohnDirewolf/pokedexcli/pokeapi"
-	"github.com/JohnDirewolf/pokedexcli/pokecache"
+	//"github.com/JohnDirewolf/pokedexcli/pokecache"
 )
 
 // Commands is basically a constant, it is in this structure as this what is directed by the project specs.
@@ -20,36 +23,7 @@ var commands map[string]cliCommand
 // Location Start ID for Map and MapB, defined here so both functions can access it.
 var locationStartID int = 1
 
-// The Cache variable we will be using
-var myCache pokecache.CacheStruct
-
-func getKnownCommands() map[string]cliCommand {
-	commands := map[string]cliCommand{
-		"help": {
-			name:        "help",
-			description: "Displays a help message",
-			callback:    commandHelp,
-		},
-		"exit": {
-			name:        "exit",
-			description: "Exit the Pokedex",
-			callback:    commandExit,
-		},
-		"map": {
-			name:        "map",
-			description: "Return 20 locations",
-			callback:    commandMap,
-		},
-		"mapb": {
-			name:        "mapb",
-			description: "Go back 20 locations",
-			callback:    commandMapB,
-		},
-	}
-	return commands
-}
-
-func commandHelp() error {
+func commandHelp(notused string) error {
 	fmt.Println("-----Pokedex Help-----")
 	fmt.Println("Commands:")
 	for command := range commands {
@@ -60,45 +34,18 @@ func commandHelp() error {
 	return nil
 }
 
-func commandExit() error {
+func commandExit(notused string) error {
 	//This is just for the cliCommand structure and if we need to do something before closing. Now it just returns and the main func breaks.
 	return nil
 }
 
-func commandMap() error {
+func commandMap(notused string) error {
 
 	for locationID := locationStartID; locationID < locationStartID+20; locationID++ {
-		URL := fmt.Sprintf("https://pokeapi.co/api/v2/location-area/%d/", locationID)
-		var locationVar pokeapi.Location
-
-		if localLocationData, found := myCache.Get(URL); found {
-			err := json.Unmarshal(localLocationData, &locationVar)
-			if err != nil {
-				fmt.Printf("Unknown Location ID: %d\n", locationID)
-			} else {
-				fmt.Println(locationVar.Name)
-			}
+		if locationVar, err := pokeapi.GetLocation(strconv.Itoa(locationID)); err == nil {
+			fmt.Println(locationVar.Name)
 		} else {
-			locationData, err := http.Get(URL)
-			defer locationData.Body.Close()
-			if err != nil {
-				fmt.Printf("Error accessing PokeAPI: %s\n", err)
-				return err
-			}
-			decoder := json.NewDecoder(locationData.Body)
-			err = decoder.Decode(&locationVar)
-			//Add the existing location to cache
-			if locationByte, err := json.Marshal(locationVar); err != nil {
-				fmt.Printf("Error Marshalling Data on Location: %v\n", err)
-			} else {
-				myCache.Add(URL, locationByte)
-			}
-
-			if err != nil {
-				fmt.Printf("Unknown Location ID: %d\n", locationID)
-			} else {
-				fmt.Println(locationVar.Name)
-			}
+			fmt.Println(err)
 		}
 	}
 	locationStartID = locationStartID + 20
@@ -106,7 +53,7 @@ func commandMap() error {
 	return nil
 }
 
-func commandMapB() error {
+func commandMapB(notused string) error {
 
 	//fmt.Println("Start command MapB")
 	if locationStartID == 1 {
@@ -120,15 +67,44 @@ func commandMapB() error {
 			locationStartID = 1
 		}
 	}
-	commandMap()
+	commandMap("")
+	return nil
+}
+
+func commandExplore(areaName string) error {
+	var locationVar pokeapi.LocationArea
+	var err error
+
+	//first check if we have an area.
+	if areaName == "" {
+		fmt.Println("No Area Provided. Proper usage: <Explore area-name>")
+		return errors.New("No area provided")
+	} else {
+		if locationVar, err = pokeapi.GetLocation(areaName); err == nil {
+			//So err is nil if the api returned a value or it returned NO value on not found so we need to check that.
+			if locationVar.Name == "" {
+				fmt.Println("Area not found! Check your location name!")
+				return errors.New("Area not found")
+			}
+		} else {
+			fmt.Printf("Could not retrieve that location! Error Reported: %v\n", err)
+			return err
+		}
+	}
+	//Got through all the problems so we have a location variable!
+	fmt.Printf("Exploring %s...\n", locationVar.Name)
+	for i := range locationVar.PokemonEncounters {
+		fmt.Printf(" - %s\n", locationVar.PokemonEncounters[i].Pokemon.Name)
+	}
+
 	return nil
 }
 
 func main() {
 	//Initialize our list of known commands
 	commands = getKnownCommands()
-	//Create the Cache
-	myCache = pokecache.NewCache(5 * time.Second)
+	//Intialize the Cache
+	pokeapi.InitializeCache()
 
 	fmt.Println("Welcome to the Pokedex!")
 	//Create a Scanner
@@ -138,11 +114,18 @@ func main() {
 		//Scan command line for input
 		cmdScan.Scan()
 		//Get command and I put it to all lower to help in processing the commands.
-		cmd := strings.ToLower(cmdScan.Text())
+		cmdLine := strings.Split(strings.ToLower(cmdScan.Text()), " ")
+		//Split cmdLine into the actually command "cmd" and parameter "par" if command takes a parameter eg explore
+		cmd := cmdLine[0]
+		//by defalut par is empty string
+		var par string = ""
+		if len(cmdLine) > 1 {
+			par = cmdLine[1]
+		}
 		//Check if it is a valid command, if so process it based on the fuction in the structure or alert user the command is invalid
 		//fmt.Printf("Your command: %v\n", cmd)
 		if _, exists := commands[cmd]; exists {
-			commands[cmd].callback()
+			commands[cmd].callback(par)
 		} else {
 			fmt.Println("Unknown command: Type 'help' for valid commands.")
 			fmt.Println("")
