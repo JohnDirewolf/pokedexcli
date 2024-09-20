@@ -25,7 +25,7 @@ var myPokemon map[string]pokeapi.Pokemon
 // Location Start ID for Map and MapB, defined here so both functions can access it.
 var locationStartID int = 1
 
-func commandHelp(notused string) error {
+func commandHelp(_ string) error {
 	fmt.Println("-----Pokedex Help-----")
 	fmt.Println("Commands:")
 	for command := range commands {
@@ -36,12 +36,12 @@ func commandHelp(notused string) error {
 	return nil
 }
 
-func commandExit(notused string) error {
+func commandExit(_ string) error {
 	//This is just for the cliCommand structure and if we need to do something before closing. Now it just returns and the main func breaks.
 	return nil
 }
 
-func commandMap(notused string) error {
+func commandMap(_ string) error {
 
 	for locationID := locationStartID; locationID < locationStartID+20; locationID++ {
 		if locationVar, err := pokeapi.GetLocation(strconv.Itoa(locationID)); err == nil {
@@ -55,7 +55,7 @@ func commandMap(notused string) error {
 	return nil
 }
 
-func commandMapB(notused string) error {
+func commandMapB(_ string) error {
 
 	//fmt.Println("Start command MapB")
 	if locationStartID == 1 {
@@ -129,6 +129,7 @@ func commandCapture(pokemonName string) error {
 	//fmt.Printf("Chance of capture: %v\n", pokemonVar.BaseExperience)
 	if (rand.Intn(316) + 35) >= pokemonVar.BaseExperience {
 		fmt.Printf("%s was caught!\n", pokemonVar.Name)
+		fmt.Println("You may now inspect it with the inspect command.")
 		//Add to a caught Pokemon map.
 		myPokemon[pokemonVar.Name] = pokemonVar
 	} else {
@@ -151,14 +152,25 @@ func commandInspect(pokemonName string) error {
 	fmt.Printf("Height: %v\n", pokemonVar.Height)
 	fmt.Printf("Weight: %v\n", pokemonVar.Weight)
 	fmt.Println("Stats:")
-	for i := 0; i < len(pokemonVar.Stats); i++ {
+	for i := range pokemonVar.Stats {
 		fmt.Printf("  - %s: %v\n", pokemonVar.Stats[i].Stat.Name, pokemonVar.Stats[i].BaseStat)
 	}
 	fmt.Println("Types:")
-	for i := 0; i < len(pokemonVar.Types); i++ {
+	for i := range pokemonVar.Types {
 		fmt.Printf("  - %s\n", pokemonVar.Types[i].Type.Name)
 	}
 
+	return nil
+}
+
+func commandPokedex(_ string) error {
+	if len(myPokemon) == 0 {
+		fmt.Println("You have not caught any Pokemon yet! Go out! Gotta catch 'em all!")
+	}
+	fmt.Println("Your Pokedex:")
+	for i := range myPokemon {
+		fmt.Printf(" - %s\n", myPokemon[i].Name)
+	}
 	return nil
 }
 
