@@ -30,8 +30,18 @@ func getKnownCommands() map[string]cliCommand {
 		},
 		"explore": {
 			name:        "explore",
-			description: "explore [area-name or id]. See a list of all the Pokemon in the area.",
+			description: "explore [area name or id]. See a list of all the Pokemon in the area.",
 			callback:    commandExplore,
+		},
+		"capture": {
+			name:        "capture",
+			description: "capture [pokemon name or id]. Try to capture the Pokemon!",
+			callback:    commandCapture,
+		},
+		"inspect": {
+			name:        "inspect",
+			description: "inspect [pokemon name]. Get information about the Pokemon you have captured.",
+			callback:    commandInspect,
 		},
 	}
 	return commands

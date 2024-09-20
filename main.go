@@ -6,6 +6,7 @@ import (
 	"fmt"
 	//"net/http"
 	"errors"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 // Commands is basically a constant, it is in this structure as this what is directed by the project specs.
 // I have this as a global variable as it is accessed by various functions as if it was a constant variable.
 var commands map[string]cliCommand
+var myPokemon map[string]pokeapi.Pokemon
 
 // Location Start ID for Map and MapB, defined here so both functions can access it.
 var locationStartID int = 1
@@ -100,11 +102,73 @@ func commandExplore(areaName string) error {
 	return nil
 }
 
+func commandCapture(pokemonName string) error {
+	var pokemonVar pokeapi.Pokemon
+	var err error
+
+	//first check if we have a Pokemon in the command line.
+	if pokemonName == "" {
+		fmt.Println("No Pokemon Provided. Proper usage: <Explore pokemon-name>")
+		return errors.New("No Pokemon provided")
+	} else {
+		if pokemonVar, err = pokeapi.GetPokemon(pokemonName); err == nil {
+			//So err is nil if the api returned a value or it returned NO value on not found so we need to check that.
+			if pokemonVar.Name == "" {
+				fmt.Println("Pokemon not found! Check your Pokemon name!")
+				return errors.New("Pokemon not found")
+			}
+		} else {
+			fmt.Printf("Could not retrieve that Pokemon! Error Reported: %v\n", err)
+			return err
+		}
+	}
+	//Got through all the problems so we have a Pokemon variable!
+	fmt.Printf("Throwing a Pokeball at %s...\n", pokemonVar.Name)
+	//Capture logic here
+	//From what I can tell the Base Exprience is 40-345. So I am doing a random 35-350 as chance to catch, if the result is >= base experience, pokemon is caught.
+	//fmt.Printf("Chance of capture: %v\n", pokemonVar.BaseExperience)
+	if (rand.Intn(316) + 35) >= pokemonVar.BaseExperience {
+		fmt.Printf("%s was caught!\n", pokemonVar.Name)
+		//Add to a caught Pokemon map.
+		myPokemon[pokemonVar.Name] = pokemonVar
+	} else {
+		fmt.Printf("%s escaped!\n", pokemonVar.Name)
+	}
+
+	return nil
+}
+
+func commandInspect(pokemonName string) error {
+	var pokemonVar pokeapi.Pokemon
+	var found bool
+
+	if pokemonVar, found = myPokemon[pokemonName]; !found {
+		fmt.Println("You have not caught that pokemon!")
+		return errors.New("You have not caught that pokemon!")
+	}
+	//We found the pokemon and have the information on that Pokemon.
+	fmt.Printf("Name: %s\n", pokemonVar.Name)
+	fmt.Printf("Height: %v\n", pokemonVar.Height)
+	fmt.Printf("Weight: %v\n", pokemonVar.Weight)
+	fmt.Println("Stats:")
+	for i := 0; i < len(pokemonVar.Stats); i++ {
+		fmt.Printf("  - %s: %v\n", pokemonVar.Stats[i].Stat.Name, pokemonVar.Stats[i].BaseStat)
+	}
+	fmt.Println("Types:")
+	for i := 0; i < len(pokemonVar.Types); i++ {
+		fmt.Printf("  - %s\n", pokemonVar.Types[i].Type.Name)
+	}
+
+	return nil
+}
+
 func main() {
 	//Initialize our list of known commands
 	commands = getKnownCommands()
 	//Intialize the Cache
 	pokeapi.InitializeCache()
+	//Initialize the captured Pokemon map
+	myPokemon = make(map[string]pokeapi.Pokemon)
 
 	fmt.Println("Welcome to the Pokedex!")
 	//Create a Scanner
